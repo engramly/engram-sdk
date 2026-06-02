@@ -1,0 +1,20 @@
+name: License Check
+
+on:
+  push:
+    paths:
+      - "LICENSE"
+      - ".github/workflows/license-check.yml"
+  pull_request:
+
+jobs:
+  verify-license:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify LICENSE file exists
+        run: test -f LICENSE
+      - name: Verify LICENSE is MIT
+        run: grep -q "MIT License" LICENSE
+      - name: Verify README references LICENSE
+        run: grep -q "LICENSE" README.md

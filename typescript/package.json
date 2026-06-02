@@ -1,0 +1,38 @@
+{
+  "name": "@engramly/engram",
+  "version": "0.1.0",
+  "description": "Official TypeScript SDK for Engram — flawless memory engrams from any web page.",
+  "license": "MIT",
+  "homepage": "https://github.com/engramly/engram-sdk",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/engramly/engram-sdk.git",
+    "directory": "typescript"
+  },
+  "keywords": ["engram", "web", "scraping", "markdown", "llm", "rag"],
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  }
+}

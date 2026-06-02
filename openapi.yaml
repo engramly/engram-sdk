@@ -1,0 +1,196 @@
+openapi: 3.1.0
+info:
+  title: Engram API
+  version: 0.1.0
+  description: |
+    Engram turns any web page into clean Markdown with primary/secondary
+    classification, preserved tables, math, and code blocks.
+  license:
+    name: MIT
+servers:
+  - url: https://api.engramly.com
+    description: Production
+  - url: http://127.0.0.1:7842
+    description: Local (self-hosted)
+
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/parse:
+    post:
+      summary: Parse a URL (server-side fetch)
+      operationId: parse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParseRequest'
+      responses:
+        '200':
+          description: Parsed result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParseResult'
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/StreamEvent'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/parse-html:
+    post:
+      summary: Parse HTML you already have
+      operationId: parseHtml
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParseHtmlRequest'
+      responses:
+        '200':
+          description: Parsed result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParseResult'
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/StreamEvent'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /healthz:
+    get:
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API key
+
+  schemas:
+    ParseRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Page URL to fetch and parse
+        render:
+          type: boolean
+          default: true
+          description: Run JS rendering via headless browser (slower, higher fidelity)
+        stream:
+          type: boolean
+          default: false
+        timeout_ms:
+          type: integer
+          default: 30000
+
+    ParseHtmlRequest:
+      type: object
+      required: [html]
+      properties:
+        html:
+          type: string
+        url:
+          type: string
+          format: uri
+          description: Optional base URL for resolving relative links
+        stream:
+          type: boolean
+          default: false
+
+    ParseResult:
+      type: object
+      required: [markdown, primary, secondary, annotations, stats]
+      properties:
+        markdown:
+          type: string
+          description: Clean Markdown of primary content
+        primary:
+          type: array
+          items: { type: integer }
+          description: Element IDs classified as primary content
+        secondary:
+          type: array
+          items: { type: integer }
+          description: Element IDs classified as secondary (noise)
+        annotations:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [table, math, code, image]
+          description: Map of eid to content annotation
+        stats:
+          $ref: '#/components/schemas/Stats'
+        page_title:
+          type: string
+          nullable: true
+        url:
+          type: string
+          nullable: true
+
+    Stats:
+      type: object
+      properties:
+        noise_ratio:
+          type: number
+          format: float
+          description: Fraction of page classified as secondary (0.0–1.0)
+        tokens_saved:
+          type: integer
+          description: Estimated LLM tokens saved vs raw HTML
+        node_count:
+          type: integer
+        latency_ms:
+          type: integer
+
+    StreamEvent:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [heuristic, annotation, markdown_chunk, done, error]
+        data:
+          description: Payload (shape depends on type)
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Too many requests
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

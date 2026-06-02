@@ -1,0 +1,25 @@
+name: TypeScript
+
+on:
+  push:
+    paths:
+      - "typescript/**"
+      - "openapi.yaml"
+      - ".github/workflows/typescript.yml"
+  pull_request:
+    paths:
+      - "typescript/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun run lint
+      - run: bun test
+      - run: bun run build
