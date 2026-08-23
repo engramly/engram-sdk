@@ -1,6 +1,7 @@
 """Streaming: print markdown as it arrives."""
 
 import sys
+
 from engramly import Engram
 
 

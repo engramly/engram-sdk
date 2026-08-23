@@ -1,8 +1,11 @@
 """Optional LlamaIndex reader for Engramly PDF parsing."""
 from __future__ import annotations
+
 from typing import Optional
+
 from engramly.client import _resolve
 from engramly.pdf import PdfClient, Source
+
 
 class EngramPDFReader:
     def __init__(self, *, api_key: Optional[str] = None, base_url: Optional[str] = None) -> None:

@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, AsyncIterator, Iterator, Optional
+from collections.abc import AsyncIterator, Iterator
+from typing import Any, Optional
 
 import httpx
 
@@ -57,7 +58,7 @@ def _raise_for_status(response: httpx.Response) -> None:
 def _safe_json(response: httpx.Response) -> Optional[dict[str, Any]]:
     try:
         return response.json()
-    except Exception:
+    except (json.JSONDecodeError, ValueError):
         return None
 
 
@@ -95,10 +96,10 @@ class Engram:
         from engramly.pdf import PdfClient
         self.pdf = PdfClient(key, url, timeout)
 
-    def __enter__(self) -> "Engram":
+    def __enter__(self) -> Engram:
         return self
 
-    def __exit__(self, *_: Any) -> None:
+    def __exit__(self, *_: object) -> None:
         self.close()
 
     def close(self) -> None:
@@ -165,10 +166,10 @@ class AsyncEngram:
             transport=httpx.AsyncHTTPTransport(retries=max_retries),
         )
 
-    async def __aenter__(self) -> "AsyncEngram":
+    async def __aenter__(self) -> AsyncEngram:
         return self
 
-    async def __aexit__(self, *_: Any) -> None:
+    async def __aexit__(self, *_: object) -> None:
         await self.close()
 
     async def close(self) -> None:

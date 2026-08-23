@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional, Union
+
 import httpx
+
 from engramly.types import PdfInspectResult, PdfParseResult
 
 Source = Union[str, Path, bytes]

@@ -5,7 +5,8 @@ Lazy import keeps langchain optional.
 
 from __future__ import annotations
 
-from typing import Iterable, Iterator, Optional
+from collections.abc import Iterable, Iterator
+from typing import Optional
 
 from engramly.client import Engram
 from engramly.pdf import PdfClient, Source

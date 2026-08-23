@@ -48,9 +48,8 @@ def test_auth_error():
     respx.post(f"{BASE}/v1/parse").mock(
         return_value=httpx.Response(401, json={"error": {"code": "auth", "message": "bad key"}})
     )
-    with Engram(api_key="sk-bad") as engram:
-        with pytest.raises(AuthError):
-            engram.parse("https://example.com")
+    with Engram(api_key="sk-bad") as engram, pytest.raises(AuthError):
+        engram.parse("https://example.com")
 
 
 @respx.mock
@@ -62,9 +61,8 @@ def test_rate_limit():
             json={"error": {"code": "rate_limited", "message": "slow down"}},
         )
     )
-    with Engram(api_key="sk-test") as engram:
-        with pytest.raises(RateLimitError) as exc:
-            engram.parse("https://example.com")
+    with Engram(api_key="sk-test") as engram, pytest.raises(RateLimitError) as exc:
+        engram.parse("https://example.com")
     assert exc.value.retry_after == 5.0
 
 
