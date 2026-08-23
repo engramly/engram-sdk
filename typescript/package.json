@@ -10,6 +10,7 @@
     "directory": "typescript"
   },
   "keywords": ["engram", "web", "scraping", "markdown", "llm", "rag"],
+  "publishConfig": { "access": "public", "provenance": true },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

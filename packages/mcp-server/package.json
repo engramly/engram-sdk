@@ -1,6 +1,11 @@
 {
   "name": "@engramly/mcp-server", "version": "0.1.0", "type": "module",
-  "bin": { "engramly-mcp": "./dist/main.js" }, "files": ["dist", "README.md"],
+  "description": "MCP server for page-aware, high-fidelity PDF parsing with bounded context output.",
+  "license": "MIT", "homepage": "https://github.com/engramly/engram-sdk",
+  "repository": { "type": "git", "url": "https://github.com/engramly/engram-sdk.git", "directory": "packages/mcp-server" },
+  "keywords": ["mcp", "model-context-protocol", "pdf", "markdown", "ocr", "llm", "agent"],
+  "publishConfig": { "access": "public", "provenance": true },
+  "bin": { "engramly-mcp": "./dist/main.js" }, "files": ["dist", "README.md", "LICENSE"],
   "dependencies": { "@modelcontextprotocol/sdk": "^1.17.0", "zod": "^3.25.0" },
   "scripts": { "build": "tsup", "test": "bun test", "prepack": "bun run build" },
   "engines": { "node": ">=18" },
