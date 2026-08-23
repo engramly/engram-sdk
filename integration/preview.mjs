@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises"
+import { readFile, stat } from "node:fs/promises"
 import { basename } from "node:path"
 
 const base = (process.env.ENGRAMLY_PREVIEW_URL ?? "https://api-preview.engramly.net").replace(/\/$/, "")
@@ -8,6 +8,8 @@ const local = process.env.ENGRAMLY_TEST_PDF
 const large = process.env.ENGRAMLY_TEST_LARGE_PDF
 const remote = process.env.ENGRAMLY_TEST_REMOTE_PDF
 if (!key || !local || !large || !remote) throw new Error("Set ENGRAMLY_API_KEY, ENGRAMLY_TEST_PDF, ENGRAMLY_TEST_LARGE_PDF, and ENGRAMLY_TEST_REMOTE_PDF")
+const largeBytes = (await stat(large)).size
+if (largeBytes > 10 * 1024 * 1024) throw new Error(`ENGRAMLY_TEST_LARGE_PDF is ${(largeBytes / 1024 / 1024).toFixed(1)} MiB; the API limit is 10 MiB. Choose a 60+ page fixture below the limit.`)
 
 async function call(path, source, fields = {}, retries = 0) {
   const started = Date.now()
