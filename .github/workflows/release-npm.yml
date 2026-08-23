@@ -26,6 +26,6 @@ jobs:
       - run: npm pack --dry-run --workspace typescript
       - run: npm pack --dry-run --workspace packages/cli
       - run: npm pack --dry-run --workspace packages/mcp-server
-      - run: npm publish --workspace typescript
-      - run: npm publish --workspace packages/cli
-      - run: npm publish --workspace packages/mcp-server
+      - run: npm publish --workspace typescript --provenance
+      - run: npm publish --workspace packages/cli --provenance
+      - run: npm publish --workspace packages/mcp-server --provenance
