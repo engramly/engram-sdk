@@ -77,4 +77,12 @@ describe("Engram", () => {
     await engram.parse("https://example.com")
     expect(capturedUrl).toBe("http://localhost:7842/v1/parse")
   })
+
+  test("inspect pdf uses multipart PDF endpoint", async () => {
+    let request: RequestInit | undefined
+    const f: typeof fetch = async (_input, init) => { request = init; return new Response(JSON.stringify({ document_id: "abc", filename: "x.pdf", pages: 2, title: null, author: null, encrypted: false, outline_source: "none", outline: [] })) }
+    const engram = new Engram({ apiKey: "key", fetch: f })
+    const result = await engram.pdf.inspect(new Uint8Array([1, 2]))
+    expect(result.documentId).toBe("abc"); expect(request?.body).toBeInstanceOf(FormData)
+  })
 })

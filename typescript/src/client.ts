@@ -9,9 +9,10 @@ import type {
   ParseOptions,
   ParseResult,
   StreamEvent,
+  PdfSource, PdfInspectResult, PdfOptions, PdfParseResult,
 } from "./types"
 
-const DEFAULT_BASE_URL = "https://api.engramly.com"
+const DEFAULT_BASE_URL = "https://api.engramly.net"
 const DEFAULT_TIMEOUT = 60_000
 const USER_AGENT = "engramly-ts/0.1.0"
 
@@ -19,17 +20,17 @@ const USER_AGENT = "engramly-ts/0.1.0"
 declare const process: { env?: Record<string, string | undefined> } | undefined
 
 function resolveApiKey(provided?: string): string {
-  const key = provided ?? process?.env?.ENGRAM_API_KEY
+  const key = provided ?? process?.env?.ENGRAMLY_API_KEY ?? process?.env?.ENGRAM_API_KEY
   if (!key) {
     throw new EngramError(
-      "apiKey is required. Pass { apiKey } or set ENGRAM_API_KEY.",
+      "apiKey is required. Pass { apiKey } or set ENGRAMLY_API_KEY.",
     )
   }
   return key
 }
 
 function resolveBaseUrl(provided?: string): string {
-  const url = provided ?? process?.env?.ENGRAM_BASE_URL ?? DEFAULT_BASE_URL
+  const url = provided ?? process?.env?.ENGRAMLY_BASE_URL ?? process?.env?.ENGRAM_BASE_URL ?? DEFAULT_BASE_URL
   return url.replace(/\/$/, "")
 }
 
@@ -72,12 +73,49 @@ export class Engram {
   private baseUrl: string
   private timeout: number
   private fetchImpl: typeof fetch
+  readonly pdf: {
+    inspect: (source: PdfSource, signal?: AbortSignal) => Promise<PdfInspectResult>
+    parse: (source: PdfSource, options?: PdfOptions) => Promise<PdfParseResult>
+  }
 
   constructor(config: EngramConfig = {}) {
     this.apiKey = resolveApiKey(config.apiKey)
     this.baseUrl = resolveBaseUrl(config.baseUrl)
     this.timeout = config.timeout ?? DEFAULT_TIMEOUT
     this.fetchImpl = config.fetch ?? fetch
+    this.pdf = {
+      inspect: (source, signal) => this.inspectPdf(source, signal),
+      parse: (source, options) => this.parsePdf(source, options),
+    }
+  }
+
+  private pdfForm(source: PdfSource, options: PdfOptions = {}): FormData {
+    const form = new FormData()
+    if (typeof source === "string" && /^https:\/\//i.test(source)) form.set("url", source)
+    else if (typeof source === "string") throw new EngramError("Pass local PDF bytes; paths are resolved by the CLI and MCP server.")
+    else form.set("file", source instanceof Blob ? source : new Blob([source.slice().buffer as ArrayBuffer], { type: "application/pdf" }), "document.pdf")
+    if (options.pages) form.set("pages", options.pages)
+    if (options.figures !== undefined) form.set("figures", String(options.figures))
+    if (options.dpi !== undefined) form.set("dpi", String(options.dpi))
+    return form
+  }
+
+  private pdfHeaders(): Record<string, string> {
+    return { Authorization: `Bearer ${this.apiKey}`, "User-Agent": USER_AGENT }
+  }
+
+  private async inspectPdf(source: PdfSource, signal?: AbortSignal): Promise<PdfInspectResult> {
+    const response = await this.fetchImpl(`${this.baseUrl}/v1/pdf/inspect`, { method: "POST", headers: this.pdfHeaders(), body: this.pdfForm(source), signal: this.withTimeout(signal) })
+    await throwForStatus(response)
+    const raw = await response.json() as Record<string, unknown>
+    return { documentId: String(raw.document_id), filename: raw.filename as string | null, pages: Number(raw.pages), title: raw.title as string | null, author: raw.author as string | null, encrypted: Boolean(raw.encrypted), outlineSource: raw.outline_source as "pdf" | "none", outline: raw.outline as PdfInspectResult["outline"] }
+  }
+
+  private async parsePdf(source: PdfSource, options: PdfOptions = {}): Promise<PdfParseResult> {
+    const response = await this.fetchImpl(`${this.baseUrl}/v1/pdf/parse`, { method: "POST", headers: this.pdfHeaders(), body: this.pdfForm(source, options), signal: this.withTimeout(options.signal) })
+    await throwForStatus(response)
+    const raw = await response.json() as Record<string, unknown>
+    return { documentId: raw.document_id as string | undefined, markdown: String(raw.markdown ?? ""), pageMarkdown: (raw.page_markdown ?? []) as PdfParseResult["pageMarkdown"], pages: Number(raw.pages), crops: raw.crops as number | undefined, elapsed: Number(raw.elapsed ?? 0), metadata: (raw.metadata ?? {}) as Record<string, unknown> }
   }
 
   private headers(extra?: Record<string, string>): Record<string, string> {

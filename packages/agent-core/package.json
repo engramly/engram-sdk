@@ -1,0 +1,5 @@
+{
+  "name": "@engramly/agent-core", "version": "0.1.0", "private": true, "type": "module",
+  "exports": { ".": "./src/index.ts" }, "dependencies": { "@engramly/engram": "workspace:*" },
+  "devDependencies": { "@types/node": "^20.0.0", "typescript": "^5.4.0" }, "scripts": { "build": "tsc --noEmit" }
+}

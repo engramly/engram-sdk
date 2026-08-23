@@ -5,7 +5,7 @@ import respx
 
 from engramly import AsyncEngram
 
-BASE = "https://api.engramly.com"
+BASE = "https://api.engramly.net"
 
 SAMPLE = {
     "markdown": "# Async",

@@ -1,0 +1,8 @@
+{
+  "name": "@engramly/mcp-server", "version": "0.1.0", "type": "module",
+  "bin": { "engramly-mcp": "./dist/main.js" }, "files": ["dist", "README.md"],
+  "dependencies": { "@modelcontextprotocol/sdk": "^1.17.0", "zod": "^3.25.0" },
+  "scripts": { "build": "tsup", "test": "bun test", "prepack": "bun run build" },
+  "engines": { "node": ">=18" },
+  "devDependencies": { "@types/node": "^20.0.0", "tsup": "^8.5.0", "typescript": "^5.4.0" }
+}

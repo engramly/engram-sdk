@@ -1,0 +1,13 @@
+{
+  "name": "io.github.engramly/parse",
+  "description": "Page-aware, high-fidelity PDF parsing for coding agents with bounded context output.",
+  "repository": { "url": "https://github.com/engramly/engram-sdk", "source": "github" },
+  "version_detail": { "version": "0.1.0", "release_date": "2026-08-23", "is_latest": true },
+  "packages": [{
+    "registry_type": "npm",
+    "identifier": "@engramly/mcp-server",
+    "version": "0.1.0",
+    "transport": { "type": "stdio" },
+    "environment_variables": [{ "name": "ENGRAMLY_API_KEY", "description": "Engramly API key", "is_required": true, "is_secret": true }]
+  }]
+}

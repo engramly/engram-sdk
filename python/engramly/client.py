@@ -15,18 +15,18 @@ import httpx
 from engramly.errors import APIError, AuthError, EngramError, RateLimitError
 from engramly.types import ParseResult, StreamEvent
 
-DEFAULT_BASE_URL = "https://api.engramly.com"
+DEFAULT_BASE_URL = "https://api.engramly.net"
 DEFAULT_TIMEOUT = 60.0
 USER_AGENT = "engramly-python/0.1.0"
 
 
 def _resolve(api_key: Optional[str], base_url: Optional[str]) -> tuple[str, str]:
-    key = api_key or os.environ.get("ENGRAM_API_KEY")
+    key = api_key or os.environ.get("ENGRAMLY_API_KEY") or os.environ.get("ENGRAM_API_KEY")
     if not key:
         raise EngramError(
             "api_key is required. Pass api_key=... or set ENGRAM_API_KEY."
         )
-    url = base_url or os.environ.get("ENGRAM_BASE_URL") or DEFAULT_BASE_URL
+    url = base_url or os.environ.get("ENGRAMLY_BASE_URL") or os.environ.get("ENGRAM_BASE_URL") or DEFAULT_BASE_URL
     return key, url.rstrip("/")
 
 
@@ -92,6 +92,8 @@ class Engram:
             timeout=timeout,
             transport=httpx.HTTPTransport(retries=max_retries),
         )
+        from engramly.pdf import PdfClient
+        self.pdf = PdfClient(key, url, timeout)
 
     def __enter__(self) -> "Engram":
         return self

@@ -1,0 +1,4 @@
+[mcp_servers.engramly-parse]
+command = "npx"
+args = ["-y", "@engramly/mcp-server"]
+env_vars = ["ENGRAMLY_API_KEY"]

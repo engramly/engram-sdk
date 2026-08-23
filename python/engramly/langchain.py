@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Iterable, Iterator, Optional
 
 from engramly.client import Engram
+from engramly.pdf import PdfClient, Source
 
 
 def _import_document():
@@ -52,6 +53,24 @@ class EngramLoader:
                     "noise_ratio": result.stats.noise_ratio,
                 },
             )
+
+    def load(self) -> list:
+        return list(self.lazy_load())
+
+class EngramPDFLoader:
+    """Load a PDF as one LangChain Document per original PDF page."""
+    def __init__(self, source: Source, *, api_key: Optional[str] = None, base_url: Optional[str] = None, pages: Optional[str] = None) -> None:
+        from engramly.client import _resolve
+        key, url = _resolve(api_key, base_url)
+        self.source = source
+        self.pages = pages
+        self._client = PdfClient(key, url)
+
+    def lazy_load(self) -> Iterator:
+        Document = _import_document()
+        result = self._client.parse(self.source, pages=self.pages)
+        for page in result.page_markdown:
+            yield Document(page_content=page.markdown, metadata={"source": str(self.source), "document_id": result.document_id, "page": page.page, "pages": result.pages})
 
     def load(self) -> list:
         return list(self.lazy_load())

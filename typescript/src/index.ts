@@ -14,4 +14,5 @@ export type {
   EngramConfig,
   ParseOptions,
   ParseHtmlOptions,
+  PdfSource, PdfOutlineItem, PdfInspectResult, PdfPage, PdfParseResult, PdfOptions,
 } from "./types"

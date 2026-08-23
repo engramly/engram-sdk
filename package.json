@@ -1,0 +1,10 @@
+{
+  "name": "engramly-workspace",
+  "private": true,
+  "workspaces": ["typescript", "packages/*"],
+  "scripts": {
+    "test": "bun test",
+    "build": "bun run --filter '*' build",
+    "test:preview": "node integration/preview.mjs"
+  }
+}

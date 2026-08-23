@@ -1,0 +1,12 @@
+interface:
+  display_name: "Engramly PDF"
+  short_description: "Read complex PDFs with low context usage"
+  default_prompt: "Use $engramly-pdf to inspect and read the relevant parts of this PDF."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "engramly-parse"
+      description: "Engramly high-fidelity PDF parsing tools"
+      transport: "stdio"
+policy:
+  allow_implicit_invocation: true

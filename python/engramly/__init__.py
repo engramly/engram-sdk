@@ -13,6 +13,7 @@ from engramly.types import (
     StreamEvent,
     Annotation,
 )
+from engramly.pdf import PdfClient
 
 __version__ = "0.1.0"
 
@@ -27,4 +28,5 @@ __all__ = [
     "Stats",
     "StreamEvent",
     "Annotation",
+    "PdfClient",
 ]

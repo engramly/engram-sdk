@@ -6,7 +6,7 @@ import respx
 
 from engramly import AuthError, Engram, EngramError, RateLimitError
 
-BASE = "https://api.engramly.com"
+BASE = "https://api.engramly.net"
 
 SAMPLE = {
     "markdown": "# Hello\n\nWorld.",

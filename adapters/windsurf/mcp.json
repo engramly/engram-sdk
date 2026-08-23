@@ -1,0 +1,1 @@
+{ "mcpServers": { "engramly-parse": { "command": "npx", "args": ["-y", "@engramly/mcp-server"], "env": { "ENGRAMLY_API_KEY": "${ENGRAMLY_API_KEY}" } } } }

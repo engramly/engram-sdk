@@ -1,7 +1,7 @@
 {
   "name": "@engramly/engram",
   "version": "0.1.0",
-  "description": "Official TypeScript SDK for Engram — flawless memory engrams from any web page.",
+  "description": "Official TypeScript SDK for Engramly web and PDF parsing.",
   "license": "MIT",
   "homepage": "https://github.com/engramly/engram-sdk",
   "repository": {

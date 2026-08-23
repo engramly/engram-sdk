@@ -1,0 +1,7 @@
+{
+  "name": "engramly", "version": "0.1.0", "type": "module",
+  "bin": { "engram": "./dist/main.js" }, "files": ["dist", "README.md"],
+  "scripts": { "build": "tsup", "test": "bun test", "prepack": "bun run build" },
+  "engines": { "node": ">=18" },
+  "devDependencies": { "@types/node": "^20.0.0", "tsup": "^8.5.0", "typescript": "^5.4.0" }
+}
