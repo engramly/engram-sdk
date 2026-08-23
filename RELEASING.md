@@ -169,4 +169,69 @@ git status --short
 - Never expose npm tokens or Engramly API keys in command output or committed
   files.
 - Never push a release tag during this manual workflow.
-- Never add package publishing commands to the repository's CI workflows.
+- Never add package publishing commands to CI without completing the migration
+  checklist below in the same pull request.
+
+## Future migration to GitHub Actions
+
+Manual publishing is the active release process today. When releases become
+routine, the repository may switch to npm Trusted Publishing through GitHub
+Actions. Do not operate both release paths for the same version.
+
+Use a manually dispatched, approval-gated workflow. Do not publish whenever an
+arbitrary `v*` tag is pushed. The maintainer remains responsible for updating
+and reviewing package versions before starting the workflow.
+
+### Migration checklist
+
+Complete all of these items in one pull request:
+
+1. Add `.github/workflows/release-npm.yml` with `workflow_dispatch` and a
+   required `version` input.
+2. Create a protected GitHub Environment named `npm-production` and configure
+   required reviewers.
+3. Configure npm Trusted Publisher separately for all three packages:
+
+   - GitHub owner: `engramly`
+   - Repository: `engram-sdk`
+   - Workflow: `release-npm.yml`
+   - Environment: `npm-production`
+
+4. Grant the workflow only `contents: read` and `id-token: write`. Do not add an
+   npm token or `NODE_AUTH_TOKEN` secret.
+5. Validate that the input version is valid SemVer, that the workflow runs from
+   `main`, and that all three `package.json` files contain exactly that version.
+6. Check that the version does not already exist for any of the three packages
+   before the first publish command runs.
+7. Run the same build, test, and `npm pack --dry-run` checks documented above.
+8. Publish in dependency order with npm provenance enabled.
+9. Perform the registry and clean-install verification documented above.
+10. Rewrite this document so GitHub Actions is the primary process and move the
+    local publishing commands into a clearly marked emergency procedure.
+
+The future publish commands should remain explicit:
+
+```bash
+npm publish --workspace typescript --access public --provenance
+npm publish --workspace packages/cli --provenance
+npm publish --workspace packages/mcp-server --access public --provenance
+```
+
+The workflow must stop before publishing if any validation, test, build, pack,
+or registry preflight check fails. GitHub Environment approval should occur only
+after those checks pass, immediately before the publish job.
+
+### Automated release sequence
+
+After migration, the maintainer workflow will be:
+
+1. Update all three package versions locally.
+2. Run local checks, commit the version change, and push `main`.
+3. Open **Actions → Release npm → Run workflow** and enter the committed
+   version.
+4. Review the preflight output and approve the `npm-production` environment.
+5. Confirm all three registry versions and run the clean-install smoke test.
+
+Local `npm publish` must not be used for a version once its Actions run has
+started. If publishing partially succeeds, inspect npm before retrying and never
+attempt to republish a package version that already exists.
