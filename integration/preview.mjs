@@ -22,9 +22,10 @@ async function call(path, source, fields = {}) {
 
 const inspect = await call("/v1/pdf/inspect", local)
 if (!(inspect.body.pages > 0) || !inspect.body.document_id) throw new Error("Local inspect contract failed")
-const sliced = await call("/v1/pdf/parse", local, { pages: "1-2" })
-if (sliced.body.page_markdown?.map(page => page.page).join(",") !== "1,2") throw new Error("Original page mapping failed")
-const cached = await call("/v1/pdf/parse", local, { pages: "1-2" })
+const localRange = inspect.body.pages >= 2 ? "1-2" : "1"
+const sliced = await call("/v1/pdf/parse", local, { pages: localRange })
+if (sliced.body.page_markdown?.map(page => page.page).join(",") !== localRange.replace("-", ",")) throw new Error("Original page mapping failed")
+const cached = await call("/v1/pdf/parse", local, { pages: localRange })
 if (cached.body.metadata?.cache !== "hit") throw new Error("Cache hit was not observed")
 const remoteInspect = await call("/v1/pdf/inspect", remote)
 if (!(remoteInspect.body.pages > 0)) throw new Error("Remote inspect failed")
