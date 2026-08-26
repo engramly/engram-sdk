@@ -9,7 +9,7 @@ import type {
   ParseOptions,
   ParseResult,
   StreamEvent,
-  PdfSource, PdfInspectResult, PdfOptions, PdfParseResult,
+  PdfSource, PdfInspectResult, PdfOptions, PdfParseResult, PdfPreflightResult,
 } from "./types"
 
 const DEFAULT_BASE_URL = "https://api.engramly.net"
@@ -74,6 +74,7 @@ export class Engram {
   private timeout: number
   private fetchImpl: typeof fetch
   readonly pdf: {
+    preflight: (source: PdfSource, options?: PdfOptions) => Promise<PdfPreflightResult>
     inspect: (source: PdfSource, signal?: AbortSignal) => Promise<PdfInspectResult>
     parse: (source: PdfSource, options?: PdfOptions) => Promise<PdfParseResult>
   }
@@ -84,6 +85,7 @@ export class Engram {
     this.timeout = config.timeout ?? DEFAULT_TIMEOUT
     this.fetchImpl = config.fetch ?? fetch
     this.pdf = {
+      preflight: (source, options) => this.preflightPdf(source, options),
       inspect: (source, signal) => this.inspectPdf(source, signal),
       parse: (source, options) => this.parsePdf(source, options),
     }
@@ -109,6 +111,16 @@ export class Engram {
     await throwForStatus(response)
     const raw = await response.json() as Record<string, unknown>
     return { documentId: String(raw.document_id), filename: raw.filename as string | null, pages: Number(raw.pages), title: raw.title as string | null, author: raw.author as string | null, encrypted: Boolean(raw.encrypted), outlineSource: raw.outline_source as "pdf" | "none", outline: raw.outline as PdfInspectResult["outline"] }
+  }
+
+  private async preflightPdf(source: PdfSource, options: PdfOptions = {}): Promise<PdfPreflightResult> {
+    if (typeof source === "string") throw new EngramError("Preflight requires local PDF bytes.")
+    const bytes = source instanceof Blob ? await source.arrayBuffer() : source.slice().buffer as ArrayBuffer
+    const digest = await crypto.subtle.digest("SHA-256", bytes)
+    const sha256 = [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, "0")).join("")
+    const response = await this.fetchImpl(`${this.baseUrl}/v1/pdf/preflight`, { method: "POST", headers: { ...this.pdfHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ sha256, dpi: options.dpi ?? 200, figures: options.figures ?? false }), signal: this.withTimeout(options.signal) })
+    await throwForStatus(response)
+    return await response.json() as PdfPreflightResult
   }
 
   private async parsePdf(source: PdfSource, options: PdfOptions = {}): Promise<PdfParseResult> {

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 from typing import Optional, Union
 
 import httpx
 
-from engramly.types import PdfInspectResult, PdfParseResult
+from engramly.types import PdfInspectResult, PdfParseResult, PdfPreflightResult
 
 Source = Union[str, Path, bytes]
 
@@ -26,6 +27,16 @@ class PdfClient:
         response = self._client.post("/v1/pdf/inspect", data=data, files=files)
         response.raise_for_status()
         return PdfInspectResult.model_validate(response.json())
+
+    def preflight(self, source: Source, *, figures: bool = False, dpi: int = 200) -> PdfPreflightResult:
+        if isinstance(source, bytes): content = source
+        else:
+            value = str(source)
+            if value.startswith("https://"): raise ValueError("Preflight requires local PDF bytes")
+            content = Path(value).read_bytes()
+        response = self._client.post("/v1/pdf/preflight", json={"sha256": hashlib.sha256(content).hexdigest(), "figures": figures, "dpi": dpi})
+        response.raise_for_status()
+        return PdfPreflightResult.model_validate(response.json())
 
     def parse(self, source: Source, *, pages: Optional[str] = None, figures: bool = False, dpi: int = 200) -> PdfParseResult:
         data, files = self._form(source)

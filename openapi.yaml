@@ -17,6 +17,24 @@ security:
   - bearerAuth: []
 
 paths:
+  /v1/pdf/preflight:
+    post:
+      summary: Check cache state and prewarm parse capacity
+      operationId: preflightPdf
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sha256]
+              properties:
+                sha256: { type: string, pattern: "^[a-fA-F0-9]{64}$" }
+                dpi: { type: integer, default: 200 }
+                figures: { type: boolean, default: false }
+                pages: { type: integer, minimum: 1 }
+      responses:
+        "200": { description: Cache state, either hit or miss }
   /v1/pdf/inspect:
     post:
       summary: Inspect PDF metadata and embedded outline without OCR

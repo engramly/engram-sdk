@@ -43,6 +43,7 @@ export interface EngramConfig {
 }
 
 export type PdfSource = string | Uint8Array | Blob
+export interface PdfPreflightResult { cache: "hit" | "miss" }
 export interface PdfOutlineItem { level: number; title: string; page: number }
 export interface PdfInspectResult {
   documentId: string; filename: string | null; pages: number; title: string | null

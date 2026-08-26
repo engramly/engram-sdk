@@ -6,6 +6,9 @@ from pydantic import BaseModel, Field
 
 Annotation = Literal["table", "math", "code", "image"]
 
+class PdfPreflightResult(BaseModel):
+    cache: Literal["hit", "miss"]
+
 
 class Stats(BaseModel):
     noise_ratio: float = 0.0
