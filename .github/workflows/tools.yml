@@ -1,9 +1,9 @@
 name: Agent tools
 on:
   push:
-    paths: ["packages/**", "typescript/**", "skills/**", "integration/**", "package.json", "bun.lock"]
+    paths: ["packages/**", "typescript/**", "skills/**", "integration/**", "package.json", "bun.lock", ".github/workflows/tools.yml"]
   pull_request:
-    paths: ["packages/**", "typescript/**", "skills/**", "integration/**", "package.json", "bun.lock"]
+    paths: ["packages/**", "typescript/**", "skills/**", "integration/**", "package.json", "bun.lock", ".github/workflows/tools.yml"]
 jobs:
   test:
     runs-on: ubuntu-latest
