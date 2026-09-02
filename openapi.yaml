@@ -3,12 +3,13 @@ info:
   title: Engram API
   version: 0.1.0
   description: |
-    Engram turns any web page into clean Markdown with primary/secondary
-    classification, preserved tables, math, and code blocks.
+    Engramly turns PDFs into page-aware Markdown with preserved tables, math,
+    code blocks, and document metadata.
   license:
     name: MIT
+    identifier: MIT
 servers:
-  - url: https://api.engramly.com
+  - url: https://api.engramly.net
     description: Production
   - url: http://127.0.0.1:7842
     description: Local (self-hosted)
@@ -17,6 +18,44 @@ security:
   - bearerAuth: []
 
 paths:
+  /v1/pdf/prepare/status:
+    post:
+      summary: Poll asynchronous PDF inference preparation
+      operationId: getPdfPreparationStatus
+      security: []
+      description: The token is an opaque, expiring capability returned by prepared inspection. Bearer authentication is not repeated for polling.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        "200":
+          description: Inference dependencies are ready
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state: { type: string, const: ready }
+        "202":
+          description: Preparation is still running
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state: { type: string, const: pending }
+        "400":
+          description: The preparation capability is malformed or expired
+        "502":
+          description: Inference preparation failed
   /v1/pdf/preflight:
     post:
       summary: Check cache state and prewarm parse capacity
@@ -34,7 +73,24 @@ paths:
                 figures: { type: boolean, default: false }
                 pages: { type: integer, minimum: 1 }
       responses:
-        "200": { description: Cache state, either hit or miss }
+        "200":
+          description: Cache state and acknowledged predictive worker target
+          headers:
+            X-Engram-Origin: { $ref: '#/components/headers/Origin' }
+            X-Engram-Request-Id: { $ref: '#/components/headers/RequestId' }
+            X-Engram-Workers: { $ref: '#/components/headers/Workers' }
+            X-Engram-Worker-Target: { $ref: '#/components/headers/WorkerTarget' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cache, workers, target]
+                properties:
+                  cache: { type: string, enum: [hit, miss] }
+                  workers: { type: integer, minimum: 0 }
+                  target: { type: integer, minimum: 0 }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
   /v1/pdf/inspect:
     post:
       summary: Inspect PDF metadata and embedded outline without OCR
@@ -46,11 +102,41 @@ paths:
           multipart/form-data:
             schema:
               type: object
+              oneOf:
+                - required: [file]
+                - required: [url]
               properties:
                 file: { type: string, format: binary }
-                url: { type: string, format: uri }
+                url:
+                  type: string
+                  format: uri
+                  pattern: "^https://"
+                  description: Paid requests only; public HTTPS PDF, at most 10 MB and 15 seconds including redirects
       responses:
-        "200": { description: PDF inspection result }
+        "200":
+          description: PDF inspection result
+          headers:
+            X-Engram-Origin: { $ref: '#/components/headers/Origin' }
+            X-Engram-Request-Id: { $ref: '#/components/headers/RequestId' }
+            X-Engram-Cache: { $ref: '#/components/headers/Cache' }
+            X-Engram-Inspect-Cache: { $ref: '#/components/headers/InspectCache' }
+            Server-Timing: { $ref: '#/components/headers/ServerTiming' }
+            X-Engram-Workers: { $ref: '#/components/headers/Workers' }
+            X-Engram-Worker-Target: { $ref: '#/components/headers/WorkerTarget' }
+            X-Engram-Prepared:
+              description: "`1` when preparation completed in this request; `0` with a preparation token when polling is required"
+              schema: { type: string, enum: ["0", "1"] }
+            X-Engram-Prepare-Token:
+              description: "Opaque expiring token for `/v1/pdf/prepare/status`"
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PdfInspectResult' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "413": { $ref: '#/components/responses/PayloadTooLarge' }
+        "502": { $ref: '#/components/responses/UpstreamFailure' }
+        "504": { $ref: '#/components/responses/UpstreamTimeout' }
   /v1/pdf/parse:
     post:
       summary: Parse selected PDF pages into page-aware Markdown
@@ -62,75 +148,95 @@ paths:
           multipart/form-data:
             schema:
               type: object
+              oneOf:
+                - required: [file]
+                - required: [url]
               properties:
                 file: { type: string, format: binary }
-                url: { type: string, format: uri }
+                url:
+                  type: string
+                  format: uri
+                  pattern: "^https://"
+                  description: Paid requests only; public HTTPS PDF, at most 10 MB and 15 seconds including redirects
                 pages: { type: string, example: "1-5,8" }
                 dpi: { type: integer, minimum: 100, maximum: 300, default: 200 }
                 figures: { type: boolean, default: false }
+                prewarmed:
+                  type: boolean
+                  default: false
+                  description: Internal SDK hint set after an acknowledged preflight; allows cold-capacity admission wait
+                page_count:
+                  type: integer
+                  minimum: 1
+                  description: Internal SDK hint carrying the page count verified by inspect
       responses:
-        "200": { description: Page-aware Markdown parse result }
-  /v1/parse:
-    post:
-      summary: Parse a URL (server-side fetch)
-      operationId: parse
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ParseRequest'
-      responses:
-        '200':
-          description: Parsed result
+        "200":
+          description: Page-aware Markdown parse result
+          headers:
+            X-Engram-Origin: { $ref: '#/components/headers/Origin' }
+            X-Engram-Request-Id: { $ref: '#/components/headers/RequestId' }
+            X-Engram-Cache: { $ref: '#/components/headers/Cache' }
+            X-Engram-Workers: { $ref: '#/components/headers/Workers' }
+            X-Engram-Worker-Target: { $ref: '#/components/headers/WorkerTarget' }
+            Server-Timing: { $ref: '#/components/headers/ServerTiming' }
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/ParseResult'
-            text/event-stream:
-              schema:
-                $ref: '#/components/schemas/StreamEvent'
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '429': { $ref: '#/components/responses/RateLimited' }
-
-  /v1/parse-html:
-    post:
-      summary: Parse HTML you already have
-      operationId: parseHtml
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ParseHtmlRequest'
-      responses:
-        '200':
-          description: Parsed result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ParseResult'
-            text/event-stream:
-              schema:
-                $ref: '#/components/schemas/StreamEvent'
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '429': { $ref: '#/components/responses/RateLimited' }
-
-  /healthz:
+              schema: { $ref: '#/components/schemas/PdfParseResult' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "413": { $ref: '#/components/responses/PayloadTooLarge' }
+        "429": { $ref: '#/components/responses/RateLimited' }
+        "502": { $ref: '#/components/responses/UpstreamFailure' }
+        "504": { $ref: '#/components/responses/UpstreamTimeout' }
+  /v1/health:
     get:
       summary: Health check
+      operationId: healthcheck
       security: []
       responses:
         '200':
           description: ok
+          headers:
+            X-Engram-Api-Version:
+              description: Deployed gateway API revision
+              schema: { type: string }
+            X-Engram-Capabilities:
+              description: Comma-separated deployed feature identifiers
+              schema: { type: string }
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   status: { type: string, example: ok }
+        '404':
+          description: Health route unavailable
+        '503':
+          description: Service unavailable
 
 components:
+  headers:
+    Origin:
+      description: Backend that produced the response
+      schema: { type: string, enum: [edge, modal, vast] }
+    RequestId:
+      description: Correlation ID propagated through gateway and origin logs
+      schema: { type: string }
+    Cache:
+      description: Cache tier or miss marker when known
+      schema: { type: string }
+    InspectCache:
+      description: Whether PDF metadata and outline came from the edge inspection cache
+      schema: { type: string, enum: [hit, miss] }
+    Workers:
+      description: Live Vast workers that completed runtime probing
+      schema: { type: integer, minimum: 0 }
+    WorkerTarget:
+      description: Desired Vast replica count acknowledged by the predictive scaler
+      schema: { type: integer, minimum: 0 }
+    ServerTiming:
+      description: Gateway stage durations in milliseconds
+      schema: { type: string }
   securitySchemes:
     bearerAuth:
       type: http
@@ -138,105 +244,63 @@ components:
       bearerFormat: API key
 
   schemas:
-    ParseRequest:
+    PdfInspectResult:
       type: object
-      required: [url]
+      required: [document_id, filename, pages, title, author, encrypted, outline_source, outline]
       properties:
-        url:
-          type: string
-          format: uri
-          description: Page URL to fetch and parse
-        render:
-          type: boolean
-          default: true
-          description: Run JS rendering via headless browser (slower, higher fidelity)
-        stream:
-          type: boolean
-          default: false
-        timeout_ms:
-          type: integer
-          default: 30000
+        document_id: { type: string }
+        filename: { type: [string, "null"] }
+        pages: { type: integer, minimum: 1 }
+        title: { type: [string, "null"] }
+        author: { type: [string, "null"] }
+        encrypted: { type: boolean }
+        outline_source: { type: string, enum: [pdf, none] }
+        outline:
+          type: array
+          items:
+            type: object
+            required: [level, title, page]
+            properties:
+              level: { type: integer, minimum: 1 }
+              title: { type: string }
+              page: { type: integer, minimum: 1 }
 
-    ParseHtmlRequest:
+    PdfParseResult:
       type: object
-      required: [html]
+      required: [markdown, page_markdown, pages, elapsed, metadata]
       properties:
-        html:
-          type: string
-        url:
-          type: string
-          format: uri
-          description: Optional base URL for resolving relative links
-        stream:
-          type: boolean
-          default: false
-
-    ParseResult:
-      type: object
-      required: [markdown, primary, secondary, annotations, stats]
-      properties:
+        document_id: { type: string }
         markdown:
           type: string
-          description: Clean Markdown of primary content
-        primary:
+          description: Complete Markdown for the requested pages
+        page_markdown:
           type: array
-          items: { type: integer }
-          description: Element IDs classified as primary content
-        secondary:
-          type: array
-          items: { type: integer }
-          description: Element IDs classified as secondary (noise)
-        annotations:
+          items:
+            type: object
+            required: [page, markdown]
+            properties:
+              page: { type: integer, minimum: 1 }
+              markdown: { type: string }
+        pages: { type: integer, minimum: 0 }
+        crops: { type: integer, minimum: 0 }
+        elapsed: { type: number, minimum: 0 }
+        metadata:
           type: object
-          additionalProperties:
-            type: string
-            enum: [table, math, code, image]
-          description: Map of eid to content annotation
-        stats:
-          $ref: '#/components/schemas/Stats'
-        page_title:
-          type: string
-          nullable: true
-        url:
-          type: string
-          nullable: true
-
-    Stats:
-      type: object
-      properties:
-        noise_ratio:
-          type: number
-          format: float
-          description: Fraction of page classified as secondary (0.0–1.0)
-        tokens_saved:
-          type: integer
-          description: Estimated LLM tokens saved vs raw HTML
-        node_count:
-          type: integer
-        latency_ms:
-          type: integer
-
-    StreamEvent:
-      type: object
-      required: [type]
-      properties:
-        type:
-          type: string
-          enum: [heuristic, annotation, markdown_chunk, done, error]
-        data:
-          description: Payload (shape depends on type)
+          additionalProperties: true
 
     Error:
       type: object
       required: [error]
       properties:
-        error:
-          type: object
-          properties:
-            code: { type: string }
-            message: { type: string }
+        error: { type: string }
+        detail: { type: string }
 
   responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
     Unauthorized:
       description: Missing or invalid API key
       content:
@@ -244,6 +308,21 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
     RateLimited:
       description: Too many requests
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PayloadTooLarge:
+      description: Remote PDF exceeds the hosted 10 MB limit
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    UpstreamFailure:
+      description: Remote PDF or inference upstream failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    UpstreamTimeout:
+      description: Remote PDF download exceeded the hosted 15-second deadline
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

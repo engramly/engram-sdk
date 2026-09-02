@@ -4,20 +4,17 @@
 [![TypeScript CI](https://github.com/engramly/engram-sdk/actions/workflows/typescript.yml/badge.svg)](https://github.com/engramly/engram-sdk/actions/workflows/typescript.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-Official SDKs for [Engram](https://github.com/engramly/engram) — flawless memory engrams from any web page.
-
-Engram turns messy web pages into clean Markdown with primary/secondary classification, perfectly preserved tables, math, and code blocks. Save up to 50% of your LLM token costs.
+Official SDKs for Engramly Parse's high-fidelity PDF-to-Markdown API.
 
 ```
 ┌──────────────────────────────────────────────┐
-│  URL or HTML                                  │
+│  PDF                                          │
 │         │                                     │
 │         ▼                                     │
 │  Engram API                                   │
 │         │                                     │
 │         ▼                                     │
-│  { markdown, primary, secondary,              │
-│    annotations, stats: { tokensSaved } }     │
+│  { markdown, pages, page_markdown, metadata } │
 └──────────────────────────────────────────────┘
 ```
 
@@ -27,6 +24,8 @@ Engram turns messy web pages into clean Markdown with primary/secondary classifi
 |------------|----------------------|--------|----------------------------|
 | Python     | `engramly`           | alpha  | [python/](./python)        |
 | TypeScript | `@engramly/engram`   | alpha  | [typescript/](./typescript)|
+| CLI        | `engramly`           | alpha  | [packages/cli/](./packages/cli) |
+| MCP        | `@engramly/mcp-server` | alpha | [packages/mcp-server/](./packages/mcp-server) |
 
 ## Quickstart
 
@@ -37,13 +36,13 @@ pip install engramly
 ```
 
 ```python
+from pathlib import Path
 from engramly import Engram
 
-engram = Engram(api_key="sk-...")
-result = engram.parse("https://example.com/article")
+engram = Engram(api_key="unkey_...")
+job = engram.pdf.parse_prepared(Path("report.pdf").read_bytes())
 
-print(result.markdown)
-print(f"saved {result.stats.tokens_saved} tokens ({result.stats.noise_ratio:.0%} noise)")
+print(job.result.markdown)
 ```
 
 ### TypeScript
@@ -57,11 +56,11 @@ bun add @engramly/engram
 ```ts
 import { Engram } from "@engramly/engram"
 
-const engram = new Engram({ apiKey: process.env.ENGRAM_API_KEY })
-const result = await engram.parse("https://example.com/article")
+const engram = new Engram({ apiKey: process.env.ENGRAMLY_API_KEY })
+const pdf = new Uint8Array(await Bun.file("report.pdf").arrayBuffer())
+const job = await engram.pdf.parsePrepared(pdf)
 
-console.log(result.markdown)
-console.log(`saved ${result.stats.tokensSaved} tokens`)
+console.log(job.result.markdown)
 ```
 
 ## Why Engram?
@@ -74,18 +73,23 @@ console.log(`saved ${result.stats.tokensSaved} tokens`)
 
 ## API
 
-The hosted API lives at `https://api.engramly.com` (placeholder during alpha). See [`openapi.yaml`](./openapi.yaml) for the full schema.
+The hosted API lives at `https://api.engramly.net`. See [`openapi.yaml`](./openapi.yaml) for the full schema.
 
-Two endpoints power both SDKs:
+The primary endpoints are:
 
-- `POST /v1/parse`       — engram fetches and parses a URL server-side
-- `POST /v1/parse-html`  — you supply HTML; engram parses it
+- `POST /v1/pdf/inspect` — inspect page count and outline without OCR
+- `POST /v1/pdf/preflight` — check cache and acknowledge predictive prewarm
+- `POST /v1/pdf/parse` — parse a PDF into page-aware Markdown
+- `POST /v1/pdf/prepare/status` — poll asynchronous cold-start readiness
 
-Both support streaming via Server-Sent Events.
+The hosted API accepts uploaded PDFs and public HTTPS URLs that resolve to PDF
+files. It does not expose general webpage/HTML parsing; those legacy SDK
+methods remain experimental and are not part of this release contract.
 
 ## Integrations
 
-- **LangChain** (Python) — `from engramly.langchain import EngramLoader`
+- **LangChain** (Python) — `from engramly.langchain import EngramPDFLoader`
+- **CLI and MCP** — scheduler-aware PDF parsing with cold-start progress
 
 More coming — open an issue if you want a specific framework.
 

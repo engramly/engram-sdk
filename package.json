@@ -5,6 +5,7 @@
   "scripts": {
     "test": "bun test",
     "build": "bun run --filter '*' build",
-    "test:preview": "node integration/preview.mjs"
+    "test:preview": "node integration/preview.mjs",
+    "benchmark:scheduler": "bun run --cwd typescript build && bun integration/scheduler-benchmark.mjs"
   }
 }

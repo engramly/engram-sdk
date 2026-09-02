@@ -35,24 +35,43 @@ def _headers(api_key: str) -> dict[str, str]:
     return {
         "Authorization": f"Bearer {api_key}",
         "User-Agent": USER_AGENT,
-        "Content-Type": "application/json",
     }
 
 
-def _raise_for_status(response: httpx.Response) -> None:
+def _require_web_origin(client: httpx.Client | httpx.AsyncClient) -> None:
+    if str(client.base_url).rstrip("/") == DEFAULT_BASE_URL:
+        raise EngramError(
+            "Hosted URL/HTML parsing is not available; use pdf.parse_prepared() "
+            "with PDF bytes.",
+            code="unsupported_hosted_operation",
+        )
+
+
+def _raise_for_status(
+    response: httpx.Response, *, phase: Optional[str] = None, request: Any = None,
+) -> None:
     if response.status_code < 400:
         return
     body = _safe_json(response)
-    err = (body or {}).get("error") or {}
-    message = err.get("message") or response.text or response.reason_phrase
-    code = err.get("code")
+    err = (body or {}).get("error")
+    code = err if isinstance(err, str) else (err or {}).get("code")
+    detail = (err or {}).get("message") if isinstance(err, dict) else None
+    detail = detail or ((err or {}).get("detail") if isinstance(err, dict) else None)
+    fallback = (
+        "PDF origin timed out while waiting for inference capacity; the request is not "
+        "retried because it may already be running"
+        if response.status_code == 524 else response.reason_phrase
+    )
+    message = detail or (body or {}).get("detail") or code or response.text or fallback
     if response.status_code == 401:
         raise AuthError(message)
     if response.status_code == 429:
         retry = response.headers.get("retry-after")
         retry_after = float(retry) if retry else None
         raise RateLimitError(message, retry_after=retry_after)
-    raise APIError(message, status_code=response.status_code, code=code)
+    raise APIError(
+        message, status_code=response.status_code, code=code, phase=phase, request=request,
+    )
 
 
 def _safe_json(response: httpx.Response) -> Optional[dict[str, Any]]:
@@ -84,7 +103,8 @@ class Engram:
         *,
         base_url: Optional[str] = None,
         timeout: float = DEFAULT_TIMEOUT,
-        max_retries: int = 2,
+        max_retries: int = 0,
+        pdf_timeout: float = 15 * 60.0,
     ) -> None:
         key, url = _resolve(api_key, base_url)
         self._client = httpx.Client(
@@ -94,7 +114,14 @@ class Engram:
             transport=httpx.HTTPTransport(retries=max_retries),
         )
         from engramly.pdf import PdfClient
-        self.pdf = PdfClient(key, url, timeout)
+        # A parse may already have been admitted to a GPU when the connection
+        # fails. Replaying that POST can duplicate expensive work, so an
+        # explicitly retrying web client gets a separate no-retry PDF pool.
+        self.pdf = (
+            PdfClient(key, url, pdf_timeout, client=self._client)
+            if max_retries == 0
+            else PdfClient(key, url, pdf_timeout)
+        )
 
     def __enter__(self) -> Engram:
         return self
@@ -103,6 +130,7 @@ class Engram:
         self.close()
 
     def close(self) -> None:
+        self.pdf.close()
         self._client.close()
 
     def parse(
@@ -113,6 +141,7 @@ class Engram:
         timeout_ms: Optional[int] = None,
     ) -> ParseResult:
         """Parse a URL. Engram fetches it server-side."""
+        _require_web_origin(self._client)
         body: dict[str, Any] = {"url": url, "render": render}
         if timeout_ms is not None:
             body["timeout_ms"] = timeout_ms
@@ -122,6 +151,7 @@ class Engram:
 
     def parse_html(self, html: str, *, url: Optional[str] = None) -> ParseResult:
         """Parse HTML you already have."""
+        _require_web_origin(self._client)
         body: dict[str, Any] = {"html": html}
         if url:
             body["url"] = url
@@ -136,6 +166,7 @@ class Engram:
         render: bool = True,
     ) -> Iterator[StreamEvent]:
         """Parse a URL and yield streaming events as they arrive."""
+        _require_web_origin(self._client)
         body = {"url": url, "render": render, "stream": True}
         with self._client.stream(
             "POST", "/v1/parse", json=body, headers={"Accept": "text/event-stream"}
@@ -156,7 +187,8 @@ class AsyncEngram:
         *,
         base_url: Optional[str] = None,
         timeout: float = DEFAULT_TIMEOUT,
-        max_retries: int = 2,
+        max_retries: int = 0,
+        pdf_timeout: float = 15 * 60.0,
     ) -> None:
         key, url = _resolve(api_key, base_url)
         self._client = httpx.AsyncClient(
@@ -164,6 +196,12 @@ class AsyncEngram:
             headers=_headers(key),
             timeout=timeout,
             transport=httpx.AsyncHTTPTransport(retries=max_retries),
+        )
+        from engramly.pdf import AsyncPdfClient
+        self.pdf = (
+            AsyncPdfClient(key, url, pdf_timeout, client=self._client)
+            if max_retries == 0
+            else AsyncPdfClient(key, url, pdf_timeout)
         )
 
     async def __aenter__(self) -> AsyncEngram:
@@ -173,6 +211,7 @@ class AsyncEngram:
         await self.close()
 
     async def close(self) -> None:
+        await self.pdf.close()
         await self._client.aclose()
 
     async def parse(
@@ -182,6 +221,7 @@ class AsyncEngram:
         render: bool = True,
         timeout_ms: Optional[int] = None,
     ) -> ParseResult:
+        _require_web_origin(self._client)
         body: dict[str, Any] = {"url": url, "render": render}
         if timeout_ms is not None:
             body["timeout_ms"] = timeout_ms
@@ -190,6 +230,7 @@ class AsyncEngram:
         return ParseResult.model_validate(response.json())
 
     async def parse_html(self, html: str, *, url: Optional[str] = None) -> ParseResult:
+        _require_web_origin(self._client)
         body: dict[str, Any] = {"html": html}
         if url:
             body["url"] = url
@@ -203,6 +244,7 @@ class AsyncEngram:
         *,
         render: bool = True,
     ) -> AsyncIterator[StreamEvent]:
+        _require_web_origin(self._client)
         body = {"url": url, "render": render, "stream": True}
         async with self._client.stream(
             "POST", "/v1/parse", json=body, headers={"Accept": "text/event-stream"}

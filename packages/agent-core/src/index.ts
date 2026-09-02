@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import { homedir } from "node:os"
 import { basename, join } from "node:path"
 import { mkdir, readFile, writeFile } from "node:fs/promises"
-import { Engram, type PdfInspectResult, type PdfParseResult } from "@engramly/engram"
+import { Engram, type PdfInspectResult, type PdfOptions, type PdfParseResult } from "@engramly/engram"
 
 export type Source = { kind: "url"; value: string } | { kind: "file"; value: string; bytes: Uint8Array }
 export interface Hit { page: number; excerpt: string }
@@ -40,17 +40,29 @@ export class PdfAgent {
     const src = await source(value); const id = key(src); const result = await this.api.pdf.inspect(input(src)); await save(id, "inspect.json", result)
     return { ...result, cacheId: id }
   }
-  async parse(value: string, range?: string): Promise<PdfParseResult & { cacheId: string }> {
-    const src = await source(value); const id = key(src, range ?? "all"); const result = await this.api.pdf.parse(input(src), { pages: range }); await save(id, "parse.json", result)
+  async parse(value: string, range?: string, options: Pick<PdfOptions, "onProgress"> = {}): Promise<PdfParseResult & { cacheId: string }> {
+    const src = await source(value)
+    const id = key(src, range ?? "all")
+    const result = await this.parseSource(src, range, options)
+    await save(id, "parse.json", result)
     return { ...result, cacheId: id }
   }
-  async read(value: string, range?: string, cursor = 0): Promise<{ text: string; nextCursor: number | null; cacheId: string }> {
-    const result = /^[a-f0-9]{64}$/.test(value) ? { ...(await load(value)), cacheId: value } : await this.parse(value, range)
+  private async parseSource(src: Source, range?: string, options: Pick<PdfOptions, "onProgress"> = {}): Promise<PdfParseResult> {
+    if (range) return this.api.pdf.parse(input(src), { pages: range, ...options })
+    if (src.kind === "url") return this.api.pdf.parse(src.value, options)
+    // Always keep preparation and parse in the SDK's atomic flow. A manual
+    // preflight followed by plain parse drops the private readiness hint and
+    // prevents an acknowledged Vast worker from receiving the document. The
+    // gateway's content-addressed inspection cache makes this inexpensive.
+    return (await this.api.pdf.parsePrepared(input(src), options)).result
+  }
+  async read(value: string, range?: string, cursor = 0, options: Pick<PdfOptions, "onProgress"> = {}): Promise<{ text: string; nextCursor: number | null; cacheId: string }> {
+    const result = /^[a-f0-9]{64}$/.test(value) ? { ...(await load(value)), cacheId: value } : await this.parse(value, range, options)
     const wanted = new Set(pages(range, result.pages)); const text = result.pageMarkdown.filter(page => !wanted.size || wanted.has(page.page)).map(page => `<!-- page:${page.page} -->\n${page.markdown}`).join("\n")
     const chunk = text.slice(cursor, cursor + LIMIT); return { text: chunk, nextCursor: cursor + chunk.length < text.length ? cursor + chunk.length : null, cacheId: result.cacheId }
   }
-  async search(value: string, query: string, range?: string): Promise<{ hits: Hit[]; cacheId: string }> {
-    const result = /^[a-f0-9]{64}$/.test(value) ? { ...(await load(value)), cacheId: value } : await this.parse(value, range)
+  async search(value: string, query: string, range?: string, options: Pick<PdfOptions, "onProgress"> = {}): Promise<{ hits: Hit[]; cacheId: string }> {
+    const result = /^[a-f0-9]{64}$/.test(value) ? { ...(await load(value)), cacheId: value } : await this.parse(value, range, options)
     const wanted = new Set(pages(range, result.pages)); const needle = query.toLocaleLowerCase()
     const hits = result.pageMarkdown.filter(page => !wanted.size || wanted.has(page.page)).flatMap(page => { const at = page.markdown.toLocaleLowerCase().indexOf(needle); return at < 0 ? [] : [{ page: page.page, excerpt: page.markdown.slice(Math.max(0, at - 250), at + query.length + 250) }] }).slice(0, 8)
     return { hits, cacheId: result.cacheId }

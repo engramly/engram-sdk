@@ -1,10 +1,10 @@
-export { Engram } from "./client"
+export { Engram } from "./client.js"
 export {
   EngramError,
   AuthError,
   RateLimitError,
   APIError,
-} from "./errors"
+} from "./errors.js"
 export type {
   Annotation,
   Stats,
@@ -15,4 +15,5 @@ export type {
   ParseOptions,
   ParseHtmlOptions,
   PdfSource, PdfOutlineItem, PdfInspectResult, PdfPage, PdfParseResult, PdfOptions,
-} from "./types"
+  PdfPreflightResult, PdfPrepared, PdfPreparedResult, PdfProgress, PdfRequestInfo,
+} from "./types.js"

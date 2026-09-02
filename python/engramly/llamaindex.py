@@ -15,8 +15,10 @@ class EngramPDFReader:
             raise ImportError("llama-index-core is required. Install with: pip install 'engramly[llamaindex]'") from error
         key, url = _resolve(api_key, base_url)
         self._document = Document
-        self._client = PdfClient(key, url)
+        self._key = key
+        self._url = url
 
     def load_data(self, source: Source, *, pages: Optional[str] = None) -> list:
-        result = self._client.parse(source, pages=pages)
+        with PdfClient(self._key, self._url) as client:
+            result = client.parse(source, pages=pages)
         return [self._document(text=page.markdown, metadata={"source": str(source), "document_id": result.document_id, "page": page.page, "pages": result.pages}) for page in result.page_markdown]

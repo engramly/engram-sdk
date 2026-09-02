@@ -1,6 +1,6 @@
 """Error hierarchy for the Engram SDK."""
 
-from typing import Optional
+from typing import Any, Optional
 
 
 class EngramError(Exception):
@@ -27,6 +27,12 @@ class RateLimitError(EngramError):
 class APIError(EngramError):
     """Generic 4xx/5xx error from the API."""
 
-    def __init__(self, message: str, *, status_code: int, code: Optional[str] = None) -> None:
+    def __init__(
+        self, message: str, *, status_code: int, code: Optional[str] = None,
+        phase: Optional[str] = None, request: Any = None, prepared: Any = None,
+    ) -> None:
         super().__init__(message, code=code)
         self.status_code = status_code
+        self.phase = phase
+        self.request = request
+        self.prepared = prepared

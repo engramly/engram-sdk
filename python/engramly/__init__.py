@@ -7,10 +7,11 @@ from engramly.errors import (
     EngramError,
     RateLimitError,
 )
-from engramly.pdf import PdfClient
+from engramly.pdf import AsyncPdfClient, PdfClient
 from engramly.types import (
     Annotation,
     ParseResult,
+    PdfProgress,
     Stats,
     StreamEvent,
 )
@@ -21,11 +22,13 @@ __all__ = [
     "APIError",
     "Annotation",
     "AsyncEngram",
+    "AsyncPdfClient",
     "AuthError",
     "Engram",
     "EngramError",
     "ParseResult",
     "PdfClient",
+    "PdfProgress",
     "RateLimitError",
     "Stats",
     "StreamEvent",

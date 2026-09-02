@@ -39,21 +39,23 @@ class EngramLoader:
     ) -> None:
         self.urls = list(urls)
         self.render = render
-        self._client = Engram(api_key=api_key, base_url=base_url)
+        self.api_key = api_key
+        self.base_url = base_url
 
     def lazy_load(self) -> Iterator:
         Document = _import_document()
-        for url in self.urls:
-            result = self._client.parse(url, render=self.render)
-            yield Document(
-                page_content=result.markdown,
-                metadata={
-                    "source": url,
-                    "title": result.page_title,
-                    "tokens_saved": result.stats.tokens_saved,
-                    "noise_ratio": result.stats.noise_ratio,
-                },
-            )
+        with Engram(api_key=self.api_key, base_url=self.base_url) as client:
+            for url in self.urls:
+                result = client.parse(url, render=self.render)
+                yield Document(
+                    page_content=result.markdown,
+                    metadata={
+                        "source": url,
+                        "title": result.page_title,
+                        "tokens_saved": result.stats.tokens_saved,
+                        "noise_ratio": result.stats.noise_ratio,
+                    },
+                )
 
     def load(self) -> list:
         return list(self.lazy_load())
@@ -65,13 +67,15 @@ class EngramPDFLoader:
         key, url = _resolve(api_key, base_url)
         self.source = source
         self.pages = pages
-        self._client = PdfClient(key, url)
+        self._key = key
+        self._url = url
 
     def lazy_load(self) -> Iterator:
         Document = _import_document()
-        result = self._client.parse(self.source, pages=self.pages)
-        for page in result.page_markdown:
-            yield Document(page_content=page.markdown, metadata={"source": str(self.source), "document_id": result.document_id, "page": page.page, "pages": result.pages})
+        with PdfClient(self._key, self._url) as client:
+            result = client.parse(self.source, pages=self.pages)
+            for page in result.page_markdown:
+                yield Document(page_content=page.markdown, metadata={"source": str(self.source), "document_id": result.document_id, "page": page.page, "pages": result.pages})
 
     def load(self) -> list:
         return list(self.lazy_load())

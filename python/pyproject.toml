@@ -53,7 +53,11 @@ target-version = "py39"
 [tool.ruff.lint]
 # Public support starts at Python 3.9. PEP 604 `X | None` annotations are
 # syntax errors there, even though newer Ruff versions recommend them.
-ignore = ["FA100", "PYI034", "UP045"]
+ignore = ["FA100", "PYI034", "UP007", "UP045"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[[tool.mypy.overrides]]
+module = ["langchain_core.*", "llama_index.*"]
+ignore_missing_imports = true
