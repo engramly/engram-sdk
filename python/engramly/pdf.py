@@ -228,8 +228,8 @@ class PdfClient:
                 raise
             preflight = PdfPreflightResult(
                 cache="hit" if inspect.request and inspect.request.cache == "edge" else "miss",
-                workers=inspect.request.workers if inspect.request and inspect.request.workers else 0,
-                target=inspect.request.worker_target if inspect.request and inspect.request.worker_target else 0,
+                workers=request.workers or 0,
+                target=request.worker_target or 0,
                 supported=True, request=request,
             )
             inspect.prepared = True
@@ -280,8 +280,10 @@ class PdfClient:
             if state == "ready":
                 request = _request(response, started)
                 if inspect.request is not None:
-                    request.workers = inspect.request.workers
-                    request.worker_target = inspect.request.worker_target
+                    if request.workers is None:
+                        request.workers = inspect.request.workers
+                    if request.worker_target is None:
+                        request.worker_target = inspect.request.worker_target
                 return request
             if state != "pending":
                 raise APIError("PDF inference preparation failed", status_code=response.status_code, phase="preflight")
@@ -454,8 +456,8 @@ class AsyncPdfClient:
                 raise
             preflight = PdfPreflightResult(
                 cache="hit" if inspect.request and inspect.request.cache == "edge" else "miss",
-                workers=inspect.request.workers if inspect.request and inspect.request.workers else 0,
-                target=inspect.request.worker_target if inspect.request and inspect.request.worker_target else 0,
+                workers=request.workers or 0,
+                target=request.worker_target or 0,
                 supported=True, request=request,
             )
             inspect.prepared = True
@@ -508,8 +510,10 @@ class AsyncPdfClient:
             if state == "ready":
                 request = _request(response, started)
                 if inspect.request is not None:
-                    request.workers = inspect.request.workers
-                    request.worker_target = inspect.request.worker_target
+                    if request.workers is None:
+                        request.workers = inspect.request.workers
+                    if request.worker_target is None:
+                        request.worker_target = inspect.request.worker_target
                 return request
             if state != "pending":
                 raise APIError("PDF inference preparation failed", status_code=response.status_code, phase="preflight")

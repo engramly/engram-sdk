@@ -68,6 +68,9 @@ from the full parse-result cache in `request.cache`.
 `workers` is the live runtime-probed Vast capacity; `target` is the desired
 replica count. A target above the ready count means capacity is still booting
 and the gateway keeps the Modal fallback warm.
+Current gateways poll Modal and Vast readiness concurrently; the first ready
+provider wins without submitting inference during the race. The SDK preserves
+that provider's origin and worker count and then submits the PDF exactly once.
 `job.preflight.supported` is `false` when a legacy gateway has no preparation
 route; zero workers on a supported preflight instead means Modal was warmed.
 

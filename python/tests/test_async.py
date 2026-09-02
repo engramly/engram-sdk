@@ -95,6 +95,32 @@ async def test_async_pdf_polls_asynchronous_preparation_before_parse():
 
 
 @respx.mock
+async def test_async_pdf_uses_vast_when_it_wins_asynchronous_preparation():
+    respx.post(f"{BASE}/v1/pdf/inspect").mock(return_value=httpx.Response(200, headers={
+        "x-engram-prepared": "0", "x-engram-prepare-token": "opaque-token",
+        "x-engram-workers": "0", "x-engram-worker-target": "2",
+    }, json={
+        "document_id": "abc", "pages": 2, "outline_source": "none", "outline": [],
+    }))
+    respx.post(f"{BASE}/v1/pdf/prepare/status").mock(return_value=httpx.Response(200, headers={
+        "x-engram-origin": "vast", "x-engram-workers": "2",
+    }, json={"state": "ready", "origin": "vast", "workers": 2}))
+    parse = respx.post(f"{BASE}/v1/pdf/parse").mock(return_value=httpx.Response(200, json={
+        "markdown": "ok", "pages": 2, "page_markdown": [],
+    }))
+
+    async with AsyncEngram(api_key="key") as engram:
+        result = await engram.pdf.parse_prepared(b"%PDF")
+
+    assert b'name="prewarmed"' in parse.calls[0].request.content
+    assert b'name="prepared_origin"' in parse.calls[0].request.content
+    assert b"vast" in parse.calls[0].request.content
+    assert result.preflight.workers == 2
+    assert result.preflight.target == 2
+    assert result.preflight.request.origin == "vast"
+
+
+@respx.mock
 async def test_async_pdf_polls_pending_preparation_without_blocking(monkeypatch):
     respx.post(f"{BASE}/v1/pdf/inspect").mock(return_value=httpx.Response(200, headers={
         "x-engram-prepared": "0", "x-engram-prepare-token": "opaque-token",

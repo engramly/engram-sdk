@@ -226,8 +226,12 @@ export class Engram {
         progress(options.onProgress, { phase: "prepare", state: "failed", elapsedMs: Math.round((performance.now() - started) * 10) / 10, pages: inspect.pages, request: error instanceof APIError ? error.request : undefined })
         throw error
       })
-      const request = { ...ready, workers: inspect.request.workers, workerTarget: inspect.request.workerTarget }
-      const preflight = { cache: inspect.request.cache === "edge" ? "hit" as const : "miss" as const, workers: inspect.request.workers ?? 0, target: inspect.request.workerTarget ?? 0, supported: true, request }
+      const request = {
+        ...ready,
+        workers: ready.workers ?? inspect.request.workers,
+        workerTarget: ready.workerTarget ?? inspect.request.workerTarget,
+      }
+      const preflight = { cache: inspect.request.cache === "edge" ? "hit" as const : "miss" as const, workers: request.workers ?? 0, target: request.workerTarget ?? 0, supported: true, request }
       const elapsedMs = elapsed()
       progress(options.onProgress, { phase: "prepare", state: "completed", elapsedMs, pages: inspect.pages, workers: preflight.workers, target: preflight.target, supported: true, request })
       return { inspect: { ...inspect, prepared: true }, preflight, elapsedMs }

@@ -171,6 +171,31 @@ describe("Engram", () => {
     expect(prepared.elapsedMs).toBeGreaterThanOrEqual(0)
   })
 
+  test("uses Vast when it wins asynchronous preparation", async () => {
+    const calls: Array<{ path: string; form?: FormData }> = []
+    const f: typeof fetch = async (input, init) => {
+      const path = new URL(typeof input === "string" ? input : input.url).pathname
+      calls.push({ path, form: init?.body instanceof FormData ? init.body : undefined })
+      if (path.endsWith("inspect")) return Response.json(
+        { document_id: "abc", pages: 12, outline_source: "none", outline: [] },
+        { headers: { "x-engram-prepared": "0", "x-engram-prepare-token": "opaque-token", "x-engram-workers": "0", "x-engram-worker-target": "2" } },
+      )
+      if (path.endsWith("status")) return Response.json(
+        { state: "ready", origin: "vast", workers: 2 },
+        { headers: { "x-engram-origin": "vast", "x-engram-workers": "2", "x-engram-worker-target": "2" } },
+      )
+      return Response.json({ markdown: "ok", pages: 12, page_markdown: [] }, { headers: { "x-engram-origin": "vast" } })
+    }
+    const engram = new Engram({ apiKey: "key", fetch: f })
+    const prepared = await engram.pdf.parsePrepared(new Uint8Array([1]))
+
+    expect(calls[2].form?.get("prepared_origin")).toBe("vast")
+    expect(calls[2].form?.get("prewarmed")).toBe("true")
+    expect(prepared.preflight.workers).toBe(2)
+    expect(prepared.preflight.target).toBe(2)
+    expect(prepared.preflight.request.origin).toBe("vast")
+  })
+
   test("polls pending preparation promptly and retains status telemetry", async () => {
     const calls: string[] = []
     const events: string[] = []
