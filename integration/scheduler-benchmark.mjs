@@ -3,7 +3,7 @@ import { spawn } from "node:child_process"
 import { mkdir, writeFile } from "node:fs/promises"
 import { resolve } from "node:path"
 import { Engram } from "../typescript/dist/index.js"
-import { cacheCandidates, capability, cost, fixtures, latency, parseArgs, release, sample, telemetry } from "./scheduler-benchmark-lib.mjs"
+import { cacheCandidates, capability, cost, fixtures, latency, parseArgs, release, sample, schedulerLatency, telemetry } from "./scheduler-benchmark-lib.mjs"
 
 const HELP = `Usage: bun run benchmark:scheduler -- [options] -- FILE.pdf ...
 
@@ -95,11 +95,12 @@ async function monitor() {
 }
 
 async function run(item, phase) {
+  const startedAt = Date.now()
   const started = performance.now()
   try {
     const job = await api.pdf.parsePrepared(item.bytes)
     const finished = performance.now()
-    return { phase, id: item.hash.slice(0, 12), file: item.file, bytes: item.size, pages: job.result.pages, ok: true, elapsedMs: Math.round((finished - started) * 10) / 10, prepareMs: job.elapsedMs, parseMs: job.result.request.elapsedMs, cache: job.result.metadata.cache ?? null, inspect: job.inspect.request, preflight: job.preflight, request: job.result.request }
+    return { phase, id: item.hash.slice(0, 12), file: item.file, bytes: item.size, pages: job.result.pages, ok: true, started: new Date(startedAt).toISOString(), finished: new Date().toISOString(), elapsedMs: Math.round((finished - started) * 10) / 10, prepareMs: job.elapsedMs, parseMs: job.result.request.elapsedMs, cache: job.result.metadata.cache ?? null, inspect: job.inspect.request, preflight: job.preflight, request: job.result.request }
   } catch (error) {
     const message = String(error?.message ?? "request_failed").replaceAll(key, "[redacted]").slice(0, 512)
     const prepared = error?.prepared
@@ -107,7 +108,7 @@ async function run(item, phase) {
     const preflight = prepared?.preflight ?? (error?.phase === "preflight" ? { request: error?.request } : null)
     const request = error?.phase === "parse" ? error?.request : null
     const prepareMs = prepared?.elapsedMs ?? null
-    return { phase, id: item.hash.slice(0, 12), file: item.file, bytes: item.size, pages: prepared?.inspect?.pages ?? null, ok: false, elapsedMs: Math.round((performance.now() - started) * 10) / 10, prepareMs, parseMs: request?.elapsedMs ?? null, inspect, preflight, request, error: { name: error?.name, code: error?.code, status: error?.status, phase: error?.phase, message } }
+    return { phase, id: item.hash.slice(0, 12), file: item.file, bytes: item.size, pages: prepared?.inspect?.pages ?? null, ok: false, started: new Date(startedAt).toISOString(), finished: new Date().toISOString(), elapsedMs: Math.round((performance.now() - started) * 10) / 10, prepareMs, parseMs: request?.elapsedMs ?? null, inspect, preflight, request, error: { name: error?.name, code: error?.code, status: error?.status, phase: error?.phase, message } }
   }
 }
 
@@ -146,11 +147,15 @@ await watcher
 const spend = cost(timeline)
 const useful = cost(timeline, workloadFinishedAt)
 const workload = { documents: items.length, requests: results.length, pages: unique.reduce((sum, item) => sum + (item.pages ?? 0), 0), bytes: items.reduce((sum, item) => sum + item.size, 0) }
+const scheduler = config.endpointId
+  ? schedulerLatency(timeline, results, startedAt, workloadFinishedAt, Math.max(1, config.minPeakWorkers))
+  : null
 const core = {
-  schema: 3, started: new Date(startedAt).toISOString(), finished: new Date().toISOString(), workloadFinished: new Date(workloadFinishedAt).toISOString(), baseUrl: config.baseUrl, concurrency: config.concurrency, gateway: checked,
+  schema: 4, started: new Date(startedAt).toISOString(), finished: new Date().toISOString(), workloadFinished: new Date(workloadFinishedAt).toISOString(), baseUrl: config.baseUrl, concurrency: config.concurrency, gateway: checked,
   sampling: config.endpointId ? { endpointId: config.endpointId, intervalMs: config.sampleMs, waitedForScaleDown: config.waitForScaleDown, observedScaleDown: timeline.at(-1)?.workers.length === 0, errors: samplingErrors } : null, workload,
   latency: { overall: latency(results), unique: latency(unique), cache: config.cachePass ? latency(cached) : null },
   telemetry: { overall: telemetry(results), unique: telemetry(unique), cache: config.cachePass ? telemetry(cached) : null },
+  scheduler,
   cost: { ...spend, workloadComputeDollars: useful.estimatedComputeDollars, scaleDownTailDollars: Math.max(0, spend.estimatedComputeDollars - useful.estimatedComputeDollars), dollarsPerDocument: timeline.length && workload.documents ? spend.estimatedComputeDollars / workload.documents : null, dollarsPerPage: timeline.length && workload.pages ? spend.estimatedComputeDollars / workload.pages : null },
   timeline, results,
 }
@@ -158,5 +163,5 @@ const gate = config.releaseGate ? release(core, config) : null
 const report = { ...core, gate }
 await mkdir(resolve(config.output, ".."), { recursive: true })
 await writeFile(config.output, `${JSON.stringify(report, null, 2)}\n`)
-console.log(JSON.stringify({ output: config.output, latency: report.latency, pages: workload.pages, cost: report.cost, gate }, null, 2))
+console.log(JSON.stringify({ output: config.output, latency: report.latency, scheduler: report.scheduler, pages: workload.pages, cost: report.cost, gate }, null, 2))
 if (results.some(item => !item.ok) || gate?.passed === false) process.exitCode = 1

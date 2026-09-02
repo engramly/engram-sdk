@@ -134,6 +134,88 @@ export function cost(samples, until = Infinity) {
   }
 }
 
+function timestamp(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  const parsed = Date.parse(value ?? "")
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+/**
+ * Summarize scheduler lifecycle latency from sanitized control-plane samples.
+ * Values derived from Vast polling are upper bounds within one sample interval.
+ */
+export function schedulerLatency(samples, results, startedAt, workloadFinishedAt, requiredReady = 2) {
+  const ordered = [...samples].sort((a, b) => a.at - b.at)
+  const started = timestamp(startedAt)
+  const workloadFinished = timestamp(workloadFinishedAt)
+  const initial = ordered[0]
+  const offset = (item, origin = started) => item && origin !== undefined
+    ? round(Math.max(0, item.at - origin))
+    : null
+  const capacity = ordered.find(item => (item.endpoint?.minLoad ?? 0) > 0)
+  const allocated = ordered.find(item => item.workers.length > 0)
+  const firstReady = ordered.find(item => item.workers.some(ready))
+  const required = ordered.find(item => item.workers.filter(ready).length >= requiredReady)
+  const scaled = ordered.some(item => item.workers.length > (initial?.workers.length ?? 0))
+    || ordered.some(item => (item.endpoint?.minLoad ?? 0) > (initial?.endpoint?.minLoad ?? 0))
+  const afterCapacity = capacity
+    ? ordered.filter(item => item.at > capacity.at)
+    : []
+  const afterWorkload = workloadFinished === undefined
+    ? []
+    : ordered.filter(item => item.at >= workloadFinished)
+  const scaleDownRequested = scaled
+    ? afterCapacity.find(item => (item.endpoint?.minLoad ?? 0) <= (initial?.endpoint?.minLoad ?? 0))
+    : undefined
+  const scaleDownComplete = scaled
+    ? afterWorkload.find(item => item.workers.length <= (initial?.workers.length ?? 0))
+    : undefined
+  const vastFinished = results
+    .filter(item => item.ok && item.request?.origin === "vast")
+    .map(item => timestamp(item.finished))
+    .filter(value => value !== undefined)
+    .sort((a, b) => a - b)[0]
+  const workerIds = [...new Set(ordered.flatMap(item => item.workers.map(worker => String(worker.instanceId ?? worker.id))))]
+  const workers = workerIds.map(id => {
+    const seen = ordered.find(item => item.workers.some(worker => String(worker.instanceId ?? worker.id) === id))
+    const becameReady = ordered.find(item => item.workers.some(worker => String(worker.instanceId ?? worker.id) === id && ready(worker)))
+    return {
+      id,
+      firstSeenMs: offset(seen),
+      readyMs: offset(becameReady),
+      allocationToReadyMs: seen && becameReady ? round(Math.max(0, becameReady.at - seen.at)) : null,
+    }
+  })
+  return {
+    sampleResolutionMs: ordered.length > 1
+      ? round(Math.max(...ordered.slice(1).map((item, index) => item.at - ordered[index].at).filter(value => value > 0)))
+      : null,
+    initialWorkers: initial?.workers.length ?? null,
+    initialReadyWorkers: initial?.workers.filter(ready).length ?? null,
+    initialMinLoad: initial?.endpoint?.minLoad ?? null,
+    requiredReadyWorkers: requiredReady,
+    timeToCapacityRequestMs: offset(capacity),
+    timeToFirstAllocationMs: offset(allocated),
+    timeToFirstReadyMs: offset(firstReady),
+    timeToRequiredReadyMs: offset(required),
+    capacityRequestToFirstReadyMs: capacity && firstReady
+      ? round(Math.max(0, firstReady.at - capacity.at))
+      : null,
+    allocationToFirstReadyMs: allocated && firstReady
+      ? round(Math.max(0, firstReady.at - allocated.at))
+      : null,
+    timeToFirstVastResponseMs: vastFinished !== undefined && started !== undefined
+      ? round(Math.max(0, vastFinished - started))
+      : null,
+    scaleDownRequestMs: offset(scaleDownRequested),
+    scaleDownRequestRelativeToWorkloadMs: scaleDownRequested && workloadFinished !== undefined
+      ? round(scaleDownRequested.at - workloadFinished)
+      : null,
+    scaleDownCompleteAfterWorkloadMs: offset(scaleDownComplete, workloadFinished),
+    workers,
+  }
+}
+
 export function summary(results, field = "elapsedMs") {
   const successful = results.filter(item => item.ok)
   const sorted = successful.map(item => finite(item[field])).filter(value => value !== undefined).sort((a, b) => a - b)
@@ -192,6 +274,11 @@ export function release(report, config) {
     check("cache_pass_complete", cached.length === unique.length && cached.every(item => item.ok), cached.filter(item => item.ok).length, unique.length),
     check("cache_hits_observed", cached.length === unique.length && cached.every(evidence), cached.filter(evidence).length, unique.length),
   ]
+  if (report.sampling) {
+    const first = report.timeline?.[0]
+    checks.push(check("initial_zero_workers", first?.workers?.length === 0, first?.workers?.length ?? null, 0))
+    checks.push(check("initial_zero_capacity_floor", first?.endpoint?.minLoad === 0, first?.endpoint?.minLoad ?? null, 0))
+  }
   const threshold = (name, actual, limit) => {
     if (limit === null) return
     checks.push(check(name, actual !== null && actual <= limit, actual, limit))

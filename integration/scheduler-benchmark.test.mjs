@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import { cacheCandidates, capability, cost, fixtures, latency, parseArgs, ready, release, sample, summary, telemetry } from "./scheduler-benchmark-lib.mjs"
+import { cacheCandidates, capability, cost, fixtures, latency, parseArgs, ready, release, sample, schedulerLatency, summary, telemetry } from "./scheduler-benchmark-lib.mjs"
 
 describe("scheduler benchmark", () => {
   test("parses only PDF paths after the separator", () => {
@@ -55,6 +55,30 @@ describe("scheduler benchmark", () => {
     expect(cost([first, second, third], 15_000)).toMatchObject({ workerSeconds: 15, estimatedComputeDollars: 0.00375 })
     expect(ready(first.workers[0])).toBe(false)
     expect(ready(second.workers[0])).toBe(true)
+  })
+
+  test("reports scheduler allocation, readiness, response, and scale-down latency", () => {
+    const timeline = [
+      sample(1_000, { id: 42, min_load: 0 }, [], []),
+      sample(3_000, { id: 42, min_load: 130 }, [], []),
+      sample(5_000, { id: 42, min_load: 130 }, [{ id: 7, status: "loading" }], [{ id: 7, dph_total: 0.9 }]),
+      sample(9_000, { id: 42, min_load: 130 }, [{ id: 7, status: "idle", measured_perf: 87 }], [{ id: 7, dph_total: 0.9 }]),
+      sample(11_000, { id: 42, min_load: 130 }, [{ id: 7, status: "idle", measured_perf: 87 }, { id: 8, status: "idle", measured_perf: 87 }], [{ id: 7, dph_total: 0.9 }, { id: 8, dph_total: 0.8 }]),
+      sample(15_000, { id: 42, min_load: 0 }, [{ id: 7, status: "idle", measured_perf: 87 }], [{ id: 7, dph_total: 0.9 }]),
+      sample(17_000, { id: 42, min_load: 0 }, [], []),
+    ]
+    const result = schedulerLatency(timeline, [{
+      ok: true, finished: new Date(12_000).toISOString(), request: { origin: "vast" },
+    }], 1_000, 13_000, 2)
+    expect(result).toMatchObject({
+      sampleResolutionMs: 4000, initialWorkers: 0, initialReadyWorkers: 0, initialMinLoad: 0,
+      timeToCapacityRequestMs: 2000, timeToFirstAllocationMs: 4000, timeToFirstReadyMs: 8000,
+      timeToRequiredReadyMs: 10000, capacityRequestToFirstReadyMs: 6000,
+      allocationToFirstReadyMs: 4000, timeToFirstVastResponseMs: 11000,
+      scaleDownRequestMs: 14000, scaleDownRequestRelativeToWorkloadMs: 2000,
+      scaleDownCompleteAfterWorkloadMs: 4000,
+    })
+    expect(result.workers[0]).toMatchObject({ firstSeenMs: 4000, readyMs: 8000, allocationToReadyMs: 4000 })
   })
 
   test("reports user-facing latency percentiles and origins", () => {
@@ -127,6 +151,7 @@ describe("scheduler benchmark", () => {
     const report = {
       results, latency: { unique: latency(unique), cache: latency(cached) },
       sampling: { observedScaleDown: true, errors: [] },
+      timeline: [{ endpoint: { minLoad: 0 }, workers: [] }],
       cost: { peakWorkers: 2, peakReadyWorkers: 2, unknownRateWorkerSeconds: 0, dollarsPerPage: 0.0005 },
     }
     const gate = release(report, {
@@ -146,6 +171,7 @@ describe("scheduler benchmark", () => {
     const report = {
       results: unique, latency: { unique: latency(unique), cache: latency([]) },
       sampling: { observedScaleDown: false, errors: [{ error: "vast_snapshot_failed" }] },
+      timeline: [{ endpoint: { minLoad: 1 }, workers: [{ id: 1 }] }],
       cost: { peakWorkers: 0, peakReadyWorkers: 0, unknownRateWorkerSeconds: 10, dollarsPerPage: null },
     }
     const gate = release(report, {
@@ -156,7 +182,8 @@ describe("scheduler benchmark", () => {
     expect(gate.passed).toBe(false)
     expect(gate.checks.filter(item => !item.passed).map(item => item.name)).toEqual(expect.arrayContaining([
       "minimum_unique_documents", "zero_request_failures", "no_524_responses",
-      "preflight_supported", "cache_pass_complete", "peak_ready_workers",
+      "preflight_supported", "cache_pass_complete", "initial_zero_workers",
+      "initial_zero_capacity_floor", "peak_ready_workers",
       "vast_origin_observed", "scale_down_observed", "known_worker_rates",
     ]))
   })

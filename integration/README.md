@@ -8,6 +8,12 @@ timing, including asynchronous warm-task launch; selected origin;
 ready/desired scheduler capacity; active Vast
 workers, and estimated compute cost from sampled worker residency. It never
 writes document text or raw Vast objects to the report.
+The `scheduler` section turns the sampled timeline into explicit upper-bound
+latencies: capacity request, first allocation, first ready worker, required
+ready-worker count, first Vast response, and scale-down request/completion.
+Each value is bounded by `sampleResolutionMs`; per-worker allocation-to-ready
+times make slow image pulls or model starts visible without exposing worker
+credentials.
 Failed requests retain the completed preparation, failed phase, and sanitized
 response timing when the gateway supplied them, so a release-blocking `524` is
 attributed without replaying possibly billable work.
@@ -81,3 +87,6 @@ requests.
 The worker peak counts only `idle` workers with a positive measured benchmark
 rate. Creating or loading allocations remain visible in `peakWorkers`, but do
 not satisfy `--min-peak-workers`.
+The release gate also requires its first control-plane sample to show both zero
+active workers and a zero endpoint capacity floor. This proves a run began from
+scale-to-zero instead of inheriting an already-paid warm fleet.
